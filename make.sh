@@ -1,0 +1,1 @@
+gcc -g -lpthread -o main *.c 
