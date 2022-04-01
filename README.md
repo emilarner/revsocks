@@ -2,6 +2,17 @@
 # revsocks
 Cross-platform SOCKS5 proxy server written in C that can also reverse itself over a firewall.
 
+Version 1.1: No more dedicated control ports:
+Changelog:
+
+    - There are only two servers which run now on the reverse server: remote and local.
+    
+    - Some infinite loop bugs have been (mostly) fixed.
+
+    - Implementation of recvall() changed.
+
+
+
 Revsocks is a minimal SOCKS5 proxy server that can either run as an average server or reverse itself over a firewall. Revsocks does not support UDP or BIND features, which are specified in the SOCKS5 protocol specification. Revsocks is not scalable, nor does it employ particularly good programming practices to ensure longevity. Revsocks is to be used for temporary purposes, not for outside the usage of more than about three people. Revsocks uses select() for its purposes, contributing to its lack of scalability. 
 
 In order to reverse the SOCKS5 proxy server, you need a server on another computer which is accessible over the firewall, so that the computer you wish to host the main proxy server on can access it. The server over the firewall will, itself, host a local SOCKS5 proxy server on its end, so that it may seamlessly use the remote computer as a proxy server.

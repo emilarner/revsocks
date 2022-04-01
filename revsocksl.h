@@ -20,6 +20,7 @@
 #include <netinet/in.h>
 #include <netdb.h>
 
+#include "networkmisc.h"
 #include "definitions.h"
 #include "config.h"
 
@@ -49,7 +50,6 @@ struct Client
     struct sockaddr_in addr;
 };
 
-void reliable_recv(int fd, void *dest, size_t length);
 
 RevSocks *init_socks5_server(char *username, char *password, uint16_t port);
 void *socks5_client_handler(void *info);

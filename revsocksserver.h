@@ -20,6 +20,7 @@
 #include <netinet/in.h>
 #include <netdb.h>
 
+#include "networkmisc.h"
 #include "stack.h"
 #include "config.h"
 
@@ -63,7 +64,6 @@ int start_revsocksserver(RevSocksServer *srv);
 void free_revsocksserver(RevSocksServer *srv);
 
 
-void *control_server(void *information);
 void *local_server(void *information);
 void *remote_server(void *information);
 

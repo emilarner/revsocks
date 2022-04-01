@@ -28,21 +28,6 @@ RevSocks *init_socks5_server(char *username, char *password, uint16_t port)
     return r;
 }
 
-void reliable_recv(int fd, void *dest, size_t length)
-{
-    size_t remainder = 0;
-    size_t received = recv(fd, dest, length, 0);
-
-    remainder = length - received;
-
-    while (remainder != 0)
-    {
-        size_t received2 = recv(fd, dest + received, remainder, 0);
-        remainder -= received2;
-        received += received2;
-    }
-}
-
 /* where the SOCKS5 protocol is implemented (to a certain degree.) */
 void *socks5_client_handler(void *info)
 {
@@ -340,8 +325,6 @@ int host_socks5_server(RevSocks *rs)
 /* Host a reversed SOCKS5 server. We won't be binding. Instead, we connect to a remote host. */
 int host_rev_socks5_server(RevSocks *rs, char *remote_host, int remote_port)
 {
-    int control_port = remote_port + 1;
-
     /* Why do people hate gethostbyname()? getaddrinfo() is a nightmare. */
     struct hostent *resolution = gethostbyname(remote_host);
 
@@ -357,15 +340,17 @@ int host_rev_socks5_server(RevSocks *rs, char *remote_host, int remote_port)
     struct in_addr address = *((struct in_addr*) resolution->h_addr_list[0]);
 
     control.sin_addr = address;
-    control.sin_port = htons(control_port);
+    control.sin_port = htons(remote_port);
     control.sin_family = AF_INET;
 
-    /* The control server will tell us when we have a connection. */
-    if ((connect(control_fd, (struct sockaddr*) &control, (socklen_t) sizeof(control))) < 0)
+
+    if (connect(control_fd, (struct sockaddr*) &control, (socklen_t) sizeof(control)) < 0)
     {
-        fprintf(stderr, "Error connecting to remote host control: %s\n", strerror(errno));
-        return -2;
+        fprintf(stderr, "Error connecting to control: %s\n", strerror(errno));
+        return -1;
     }
+
+    send(control_fd, "CONTROL", sizeof("CONTROL"), 0);
 
     while (true)
     {
@@ -407,6 +392,8 @@ int host_rev_socks5_server(RevSocks *rs, char *remote_host, int remote_port)
             fprintf(stderr, "Error connecting on CONNECT: %s\n", strerror(errno));
             continue;
         }
+
+        send(cfd, "NORMAL", sizeof("NORMAL"), 0);
 
         /* Cool thing: the SOCKS5 protocol implementation doesn't care whether it's a server or a client. */
         struct Client *c = (struct Client*) malloc(sizeof(struct Client));

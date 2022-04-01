@@ -34,26 +34,6 @@ int create_server(struct ServerInformation *srv, int port)
     return 0;
 }
 
-void *control_server(void *information)
-{
-    printf("Started control server.\n");
-
-    struct ServerInformation *info = (struct ServerInformation*) information;
-
-    struct sockaddr_in client;
-    socklen_t length = sizeof(client);
-
-    if ((info->srv->control_cfd = accept(info->fd, (struct sockaddr*) &client, &length)) < 0)
-    {
-        fprintf(stderr, "Error accepting control server connection: %s\n", strerror(errno));
-        return NULL; 
-    }
-
-    printf("Accepted control server connection. FD: %d\n", info->srv->control_cfd);
-
-    while (true)
-        getc(stdin);
-}
 
 void *local_server(void *information)
 {
@@ -78,6 +58,7 @@ void *local_server(void *information)
             continue;
         }
 
+        /* Send the message that we need a connection for the client we just received. */
         if (send(info->srv->control_cfd, "CONNECT", sizeof("CONNECT"), 0) < 0)
         {
             fprintf(stderr, "Critical error: control server error!: %s\n", strerror(errno));
@@ -86,7 +67,7 @@ void *local_server(void *information)
         }
 
         /* Evil! Dereferencing this 'pointer' will cause a crash -- it's just an fd!*/
-        stack_push(info->srv->stack, (void*) cfd);
+        stack_push(info->srv->stack, (void*) (long) cfd);
     }
 }
 
@@ -162,21 +143,33 @@ void *remote_server(void *information)
             continue;
         }
 
-        /* This must transcend the stack. malloc(), here we go! */
-        struct FDPair *fds = (struct FDPair*) malloc(sizeof(struct FDPair));
-        fds->remote = cfd;
-        fds->local = (int) stack_pop(info->srv->stack);
+        char handshake[16];
+        recv(cfd, handshake, sizeof(handshake), 0);
 
-        pthread_t tmp;
-        pthread_create(&tmp, NULL, glue, (void*) fds);
+        //recv(cfd, handshake, sizeof(handshake), 0);
+
+        /* This connection is a control connection; they be commanded. */
+        if (!memcmp(handshake, "CONTROL", sizeof("CONTROL")))
+        {
+            printf("%s\n", handshake);
+            printf("Control connection accepted. FD: %d\n", cfd);
+            info->srv->control_cfd = cfd;
+        }
+        else
+        {
+            /* This must transcend the stack. malloc(), here we go! */
+            struct FDPair *fds = (struct FDPair*) malloc(sizeof(struct FDPair));
+            fds->remote = cfd;
+            fds->local = (long) stack_pop(info->srv->stack);
+
+            pthread_t tmp;
+            pthread_create(&tmp, NULL, glue, (void*) fds);
+        }
     }
 }
 
 int start_revsocksserver(RevSocksServer *srv)
 {
-    struct ServerInformation control;
-    control.srv = srv;
-
     struct ServerInformation local;
     local.srv = srv;
 
@@ -186,9 +179,6 @@ int start_revsocksserver(RevSocksServer *srv)
 
     int status = 0;
 
-    if ((status = create_server(&control, srv->control_port)) < 0)
-        return status;
-
     if ((status = create_server(&remote, srv->remote_port)) < 0)
         return status;
 
@@ -196,12 +186,14 @@ int start_revsocksserver(RevSocksServer *srv)
         return status;
 
     
+    /* Again, the skidded code which works so well. */ 
+    setsockopt(local.fd, SOL_SOCKET, SO_REUSEADDR, &(int){1}, sizeof(int));
+    setsockopt(remote.fd, SOL_SOCKET, SO_REUSEADDR, &(int){1}, sizeof(int));
+
     /* START POSIX only */
-    pthread_t controlt;
     pthread_t localt;
     pthread_t remotet;
 
-    pthread_create(&controlt, NULL, control_server, (void*) &control);
     pthread_create(&localt, NULL, local_server, (void*) &local);
     pthread_create(&remotet, NULL, remote_server, (void*) &remote);
 
