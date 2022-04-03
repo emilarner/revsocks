@@ -58,8 +58,10 @@ void *local_server(void *information)
             continue;
         }
 
+        uint8_t connect_msg = REVSOCKS_CONNECT;
+
         /* Send the message that we need a connection for the client we just received. */
-        if (rsend(info->srv->control_cfd, "CONNECT", sizeof("CONNECT")) < 0)
+        if (rsend(info->srv->control_cfd, &connect_msg, 1) < 0)
         {
             fprintf(stderr, "Critical error: control server error!: %s\n", strerror(errno));
             fprintf(stderr, "~~~~~~~~~~~~~~~~^ FD: %d\n", info->srv->control_cfd);
@@ -147,30 +149,40 @@ void *remote_server(void *information)
             continue;
         }
 
-        char handshake[16];
-        rrecv(cfd, handshake, sizeof("CONTROL"));
+        uint8_t handshake;
+        rrecv(cfd, &handshake, 1);
 
-        /* This connection is a control connection; they be commanded. */
-        if (!memcmp(handshake, "CONTROL", sizeof("CONTROL")))
+        
+        switch (handshake)
         {
-            printf("Control connection accepted. FD: %d\n", cfd);
-            info->srv->control_cfd = cfd;
-        }
-        else
-        {
-            /* This must transcend the stack. malloc(), here we go! */
-            struct FDPair *fds = (struct FDPair*) malloc(sizeof(struct FDPair));
-            fds->remote = cfd;
-            fds->local = (long) stack_pop(info->srv->stack);
+            /* They want to serve as a control receiver. */
+            case REVSOCKS_CONTROL:
+            {
+                printf("Control connection accepted. FD: %d\n", cfd);
+                info->srv->control_cfd = cfd;
+                break;
+            }
+            
+            /* They're just here for data exchange via SOCKS5 proxy. */
+            case REVSOCKS_NORMAL:
+            {
+                /* This must transcend the stack. malloc(), here we go! */
+                struct FDPair *fds = (struct FDPair*) malloc(sizeof(struct FDPair));
+                fds->remote = cfd;
+                fds->local = (long) stack_pop(info->srv->stack);
 
-#ifdef UNIX
-            pthread_t tmp;
-            pthread_create(&tmp, NULL, glue, (void*) fds);
-#endif
+                #ifdef UNIX
+                    pthread_t gluet;
+                    pthread_create(&gluet, NULL, glue, (void*) fds);
+                #endif
 
-#ifdef WINDOWS
-            HANDLE gluet = CreateThread(NULL, 0, (LPTHREAD_START_ROUTINE) glue, (void*) fds, 0, NULL);
-#endif
+                #ifdef WINDOWS
+                    HANDLE gluet = CreateThread(NULL, 0, (LPTHREAD_START_ROUTINE) glue, 
+                            (void*) fds, 0, NULL);
+                #endif
+
+                break;
+            }
         }
     }
 }

@@ -37,6 +37,15 @@
 #endif
 
 
+
+enum RevSocksReverseProtocol
+{
+    REVSOCKS_CONNECT,
+    REVSOCKS_CONTROL,
+    REVSOCKS_NORMAL
+};
+
+/* SOCKS 5 protocol. */
 /* Based off of RFC1928, which is the protocol specification for SOCKS5 */
 /* Thanks for not specifying that there is no auth success reply for no authentication! */
 /* It offset everything, causing me to question reality for several hours! */

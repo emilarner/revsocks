@@ -348,14 +348,15 @@ int host_rev_socks5_server(RevSocks *rs, char *remote_host, int remote_port)
 
     if (resolution == NULL)
     {
-#ifdef UNIX
-        fprintf(stderr, "Error in remote hostname resolution: %s\n", hstrerror(h_errno));
-#endif
-#ifdef WINDOWS
-        fprintf(stderr, "Ah... Windows. Converting the hostname resolution error code to a string is hard. Here's the code: %d\n",
-            WSAGetLastError()
-        );
-#endif
+        #ifdef UNIX
+            fprintf(stderr, "Error in remote hostname resolution: %s\n", hstrerror(h_errno));
+        #endif
+        
+        #ifdef WINDOWS
+            fprintf(stderr, "Ah... Windows. Don't want to get string of error... Here's the code: %d\n",
+                WSAGetLastError()
+            );
+        #endif
         
         return -1;
     }
@@ -380,22 +381,26 @@ int host_rev_socks5_server(RevSocks *rs, char *remote_host, int remote_port)
     /* It shall tell us when to connect to the remote end as a normal socket, */
     /* upon every SOCKS5 proxy request on the local end of the reverse server. */
 
-    rsend(control_fd, "CONTROL", sizeof("CONTROL"));
+    uint8_t handshake_msg = REVSOCKS_CONTROL;
+    rsend(control_fd, &handshake_msg, 1); 
 
     while (true)
     {
-        char buffer[16];
-        ssize_t len = rrecv(control_fd, buffer, sizeof("CONNECT"));
+        uint8_t connect_msg = 0;
+        ssize_t len = rrecv(control_fd, &connect_msg, 1);
 
-        if (!len)
+        if (len <= 0)
         {
-            fprintf(stderr, "Control server has died.\n");
+            fprintf(stderr, "Control server has errored or died.\n");
             break;
         }
 
         /* Look for the CONNECT message. Inspired by firehop! */
-        if (!!memcmp(buffer, "CONNECT", len))
+        if (connect_msg != REVSOCKS_CONNECT)
         {
+            fprintf(stderr, "Error: non-connect msg sent to control socket.\n");
+            fprintf(stderr, "Here's what was sent: %d\n", connect_msg);
+
             csleep(SECOND);
             continue;
         }
@@ -420,11 +425,13 @@ int host_rev_socks5_server(RevSocks *rs, char *remote_host, int remote_port)
         if (connect(cfd, (struct sockaddr*) &client, (socklen_t) sizeof(client)) < 0)
         {
             fprintf(stderr, "Error connecting on CONNECT: %s\n", strerror(errno));
+            csleep(SECOND);
             continue;
         }
 
         /* Declare ourselves normal; we are not a CONTROL socket. */
-        rsend(cfd, "NORMAL1", sizeof("NORMAL1"));
+        uint8_t normal_msg = REVSOCKS_NORMAL;
+        rsend(cfd, &normal_msg, 1); 
 
         /* Cool thing: the SOCKS5 protocol implementation doesn't care whether it's a server or a client. */
         struct Client *c = (struct Client*) malloc(sizeof(struct Client));
