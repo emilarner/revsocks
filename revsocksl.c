@@ -384,8 +384,8 @@ int host_rev_socks5_server(RevSocks *rs, char *remote_host, int remote_port)
 
     while (true)
     {
-        char buffer[8];
-        ssize_t len = rrecv(control_fd, buffer, sizeof(buffer));
+        char buffer[16];
+        ssize_t len = rrecv(control_fd, buffer, sizeof("CONNECT"));
 
         if (!len)
         {
@@ -424,7 +424,7 @@ int host_rev_socks5_server(RevSocks *rs, char *remote_host, int remote_port)
         }
 
         /* Declare ourselves normal; we are not a CONTROL socket. */
-        rsend(cfd, "NORMAL", sizeof("NORMAL"));
+        rsend(cfd, "NORMAL1", sizeof("NORMAL1"));
 
         /* Cool thing: the SOCKS5 protocol implementation doesn't care whether it's a server or a client. */
         struct Client *c = (struct Client*) malloc(sizeof(struct Client));

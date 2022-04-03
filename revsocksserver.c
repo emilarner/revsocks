@@ -148,9 +148,7 @@ void *remote_server(void *information)
         }
 
         char handshake[16];
-        rrecv(cfd, handshake, sizeof(handshake));
-
-        //recv(cfd, handshake, sizeof(handshake), 0);
+        rrecv(cfd, handshake, sizeof("CONTROL"));
 
         /* This connection is a control connection; they be commanded. */
         if (!memcmp(handshake, "CONTROL", sizeof("CONTROL")))
