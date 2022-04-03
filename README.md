@@ -1,9 +1,18 @@
 
+
 # revsocks
 Cross-platform SOCKS5 proxy server written in C that can also reverse itself over a firewall.
 
-Version 1.1: No more dedicated control ports:
+
+Version 1.2: Windows Support:
+
+
 Changelog:
+Version 1.2:
+
+    - Windows support added. As said before, there is a minimal amount of things that need to be changed for a port. 
+
+Version 1.1:
 
     - There are only two servers which run now on the reverse server: remote and local.
     
@@ -47,3 +56,11 @@ This program is mostly for my usage, explaining the lack of clarity in my explan
 **Note: remote_port and lport must have a gap greater than 1, due to how the internal workings of this program work.**
 
 Windows support will be swiftly added. There is not much to change, considering how select() and other Berkeley socket functions are also present on Windows, through *winsock2.h*. The only main difference is the method of starting threads: Windows does not have *pthread*. Mac OS also fully implements Berkeley sockets, obviously.
+
+To compile:
+
+On Linux/UNIX machines:
+Mark the make.sh script as executable (*chmod 0755 make.sh*), check it, and then run it. The output file, *revsocks*, is your compiled program.
+
+On Windows:
+You need MSVC and the developer command prompt that comes with it. After entering the developer command prompt, run the make.bat file within this repository. The *revsocks.exe* file is your compiled Windows program.
