@@ -1,13 +1,21 @@
 
 
+
 # revsocks
 Cross-platform SOCKS5 proxy server written in C that can also reverse itself over a firewall.
 
 
-Version 1.2: Windows Support:
+Version 1.3: Windows Support + Binary protocol
 
 
 Changelog:
+
+Version 1.3:
+
+    - Text reverse protocol changed to binary.
+    - Bug fixes
+    - Speed enhancement
+
 Version 1.2:
 
     - Windows support added. As said before, there is a minimal amount of things that need to be changed for a port. 
