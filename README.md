@@ -53,9 +53,6 @@ Note: there is a potential memory dumping bug observed in this program, which is
 
 This program is mostly for my usage, explaining the lack of clarity in my explanations. In general, use *--remote-server* to host a server to help computer A get over the firewall. Use *--reverse* to reverse a SOCKS5 proxy server over the firewall to computer B. *lport* is the port which you would connect to locally on computer B to access the reversed SOCKS5 proxy session. *remote_port* is the port which must be made accessible to computer A to get past the firewall. The naming conventions are ambiguous and confusing, but it is too late to change them now. 
 
-**Note: remote_port and lport must have a gap greater than 1, due to how the internal workings of this program work.**
-
-Windows support will be swiftly added. There is not much to change, considering how select() and other Berkeley socket functions are also present on Windows, through *winsock2.h*. The only main difference is the method of starting threads: Windows does not have *pthread*. Mac OS also fully implements Berkeley sockets, obviously.
 
 To compile:
 
