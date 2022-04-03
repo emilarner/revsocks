@@ -1,2 +1,4 @@
 revsocks
 revsocks.exe
+*.exe
+*.obj
