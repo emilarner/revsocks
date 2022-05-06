@@ -8,13 +8,22 @@
 
 #include <errno.h>
 
+#include "uthash.h"
+
 #include "networkmisc.h"
 #include "definitions.h"
 #include "config.h"
 
+struct domainres
+{
+    char domain[256]; // key
+    in_addr_t ip; // value
+    UT_hash_handle hh; // <--- makes the structure hashable. 
+};
+
 struct RevSocks
 {
-    in_addr_t server_ip;
+    struct domainres *dnsoverride; 
 
     bool reverse;
 
@@ -23,7 +32,6 @@ struct RevSocks
     char password[32];
 
     uint16_t port;
-    uint16_t big_port;
 
     int fd;
     struct sockaddr_in sock;
@@ -39,7 +47,8 @@ struct Client
 };
 
 
-RevSocks *init_socks5_server(char *username, char *password, uint16_t port);
+RevSocks *init_socks5_server(char *username, char *password, uint16_t port, char *domain_file);
+int parse_domain_file(RevSocks *rs, char *filename);
 void *socks5_client_handler(void *info);
 int host_socks5_server(RevSocks *rs);
 int host_rev_socks5_server(RevSocks *rs, char *remote_host, int remote_port);

@@ -21,6 +21,7 @@ void help()
     "~~~~~^ use this if you want to host a SOCKS5 proxy server over a firewall.\n"
     "~~~~~^ DEFAULT: not reversed.\n"
     "-po, --port [port]                          Port to host on for normal SOCKS5 server.\n"
+    "~~~~~~~~~~~~^ by default, port 8080\n"
     "-rs, --remote-server [remote_port] [lport]  Setup a reverse server with the parameters specified.\n"
     "~~~~~~~~^ use this to get the SOCKS5 proxy server over the firewall.\n"
     "~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^ lport means local port; default not server.\n"
@@ -44,17 +45,17 @@ bool valid_port(char *strport)
 int main(int argc, char **argv, char **envp)
 {
 
-#ifdef WINDOWS
-    WSADATA wsaData;
-    int iResult;
+    #ifdef WINDOWS
+        WSADATA wsaData;
+        int iResult;
 
-    // Initialize Winsock
-    iResult = WSAStartup(MAKEWORD(2, 2), &wsaData);
-    if (iResult != 0) {
-        printf("WSAStartup failed: %d\n", iResult);
-        return 1;
-    }
-#endif
+        // Initialize Winsock
+        iResult = WSAStartup(MAKEWORD(2, 2), &wsaData);
+        if (iResult != 0) {
+            printf("WSAStartup failed: %d\n", iResult);
+            return 1;
+        }
+    #endif
 
     bool password_auth = false;
     char *username = NULL;
@@ -62,7 +63,7 @@ int main(int argc, char **argv, char **envp)
 
     char *dns_file = NULL;
     
-    int port = 0;
+    int port = 8080;
 
     bool reversed = false;
     char *raddr = NULL;
@@ -71,7 +72,8 @@ int main(int argc, char **argv, char **envp)
 
     bool rserver = false;
 
-
+    /* Argument parsing. The minimal way. */
+    /* That being said, this turns out to be quite miserable. */
     for (int i = 0; i < argc; i++)
     {
         if (!strcmp(argv[i], "-q") || !strcmp(argv[i], "--quiet"))
@@ -176,11 +178,24 @@ int main(int argc, char **argv, char **envp)
             help();
             return 0;
         }
+        else if (!strcmp(argv[i], "-d") || !strcmp(argv[i], "--dns"))
+        {
+            if (argv[i + 1] == NULL)
+            {
+                fprintf(stderr, "-d/--dns requires the filename of the DNS override file. See docs?\n");
+                return -1;
+            }
+
+            dns_file = argv[i + 1];
+        }
     }
     
     if (rserver)
     {   
         RevSocksServer *srv = init_revsocksserver(rport, lport);
+        printf("Hosting a reverse server, with a remote port of %d and a local port of %d\n", 
+                rport, lport);
+
         int status = start_revsocksserver(srv);
 
         if (status != 0)
@@ -201,7 +216,14 @@ int main(int argc, char **argv, char **envp)
             }
         }
 
-        RevSocks *s = init_socks5_server(username, password, port);
+        RevSocks *s = init_socks5_server(username, password, port, dns_file);
+
+        /* Error initializing SOCKS5 server. */
+        if (s == NULL)
+        {
+            fprintf(stderr, "There was an error initializing the SOCKS5 proxy server.\n");
+            return -1;
+        }
 
         if (reversed)
         {
@@ -211,10 +233,12 @@ int main(int argc, char **argv, char **envp)
                 return -1;
             }
 
+            printf("Hosting a reverse SOCKS5 proxy server over to %s:%d\n", raddr, rport);
             host_rev_socks5_server(s, raddr, rport);
         }
         else
         {
+            printf("Hosting a regular SOCKS5 proxy server on port %d\n", port);
             host_socks5_server(s);
         }
 

@@ -225,6 +225,7 @@ int start_revsocksserver(RevSocksServer *srv)
     HANDLE remotet = CreateThread(NULL, 0, (LPTHREAD_START_ROUTINE) remote_server, (void*) &remote, 0, NULL);
 #endif
 
+
     while (true)
         getc(stdin);
 

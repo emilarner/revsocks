@@ -1,6 +1,6 @@
 #include "revsocksl.h"
 
-RevSocks *init_socks5_server(char *username, char *password, uint16_t port)
+RevSocks *init_socks5_server(char *username, char *password, uint16_t port, char *domain_file)
 {
     RevSocks *r = (RevSocks*) malloc(sizeof(RevSocks));
 
@@ -11,21 +11,89 @@ RevSocks *init_socks5_server(char *username, char *password, uint16_t port)
     }
     else 
     {
+        r->password_auth = true;
         strncpy(r->username, username, sizeof(r->username));
         strncpy(r->password, password, sizeof(r->password));
     }
 
 
     r->port = port;
-    r->big_port = htons(port);
     r->fd = 0;
-
-    r->server_ip = inet_addr("192.168.0.130");
 
     /* Initializing to zero... just to make sure... */ 
     memset(&r->sock, 0, sizeof(struct sockaddr_in));
 
+    if (domain_file != NULL)
+    {
+        if (parse_domain_file(r, domain_file) < 0)
+        {
+            fprintf(stderr, "Revsocks initialization failed!\n");
+            return NULL;
+        }
+    }
+
     return r;
+}
+
+int parse_domain_file(RevSocks *rs, char *filename)
+{
+    FILE *fp = fopen(filename, "r");
+    
+    char line[512];
+
+    while (fgets(line, sizeof(line), fp) != NULL)
+    {
+        /* Ignore comments. */
+        if (line[0] == '#')
+            continue;
+
+        /* Ignore whitespace */
+        if (line[0] == ' ' || line[0] == '\n' || line[0] == '\r')
+            continue;
+
+        /* Get rid of newline character. */
+        if (line[strlen(line) - 1] == '\n')
+            line[strlen(line) - 1] = '\0'; 
+
+
+        /* Detect syntatical errors in the domain override file. */ 
+        if (strchr(line, '=') == NULL)
+        {
+            fprintf(stderr, "DNS override wrong file format... missing '=' delimiter.\n");
+            return -1;
+        }
+
+        struct domainres *pair = (struct domainres*) malloc(sizeof(struct domainres));
+
+        char *domain = strtok(line, "=");
+        strncpy(pair->domain, domain, sizeof(pair->domain));
+        
+        char *ip = strtok(NULL, "=");
+
+        printf("DNS Domain: %s\n", pair->domain);
+
+        struct hostent *ent = gethostbyname(ip);
+        if (ent == NULL)
+        {
+            #ifdef UNIX
+                fprintf(stderr, "DNS override error: IP/DOMAIN %s cannot be resolved: %s\n", 
+                    ip, hstrerror(h_errno));
+            #endif
+
+            #ifdef WINDOWS
+                fprintf(stderr, "DNS override error: IP/DOMAIN %s cannot be resolved; WSA CODE: %d\n", 
+                    ip, WSAGetLastError()); 
+            #endif 
+            continue;
+        }
+
+        pair->ip = ((struct in_addr*) ent->h_addr_list[0])->s_addr;
+
+        HASH_ADD_STR(rs->dnsoverride, domain, pair);
+        memset(line, 0, sizeof(line)); 
+    }
+
+    fclose(fp);
 }
 
 /* where the SOCKS5 protocol is implemented (to a certain degree.) */
@@ -33,7 +101,7 @@ void *socks5_client_handler(void *info)
 {
     /* SIGPIPE is the bane of our existence--disable it. */
 #ifdef UNIX
-    signal(SIGPIPE, SIG_IGN);
+    //signal(SIGPIPE, SIG_IGN);
 #endif
 
     struct Client *client = (struct Client*) info;
@@ -49,40 +117,46 @@ void *socks5_client_handler(void *info)
     
     struct ServerMethodSelection mymethod;
     mymethod.version = SOCKS5;
-    mymethod.selection = NoAuthentication;
+    mymethod.selection = client->sock->password_auth ? UsernamePassword : NoAuthentication; 
 
     rsend(client->fd, &mymethod, sizeof(mymethod));
 
-    struct ServerAuthenticationResponse authresp;
-    authresp.version = SOCKS5;
-
-    /*
-    struct ClientUserAuthentication uauth;
-    reliable_recv(client->fd, &uauth, sizeof(uauth));
-
-    char username[256];
-    reliable_recv(client->fd, username, uauth.username_len);
-
-    uint8_t password_length = 0;
-    reliable_recv(client->fd, &password_length, 1);
-
-    char password[256];
-    reliable_recv(client->fd, &password, password_length);
-
     
-
-    
-    if (!!memcmp(client->sock->username, username, uauth.username_len) || 
-        !!memcmp(client->sock->password, password, password_length))
+    /* Username-Password sub-negotiation, given we are in that mode. */
+    if (client->sock->password_auth)
     {
-        authresp.status = AuthFailed;
-        send(client->fd, &authresp, sizeof(authresp), 0);
-        goto cleanup;
-    }
-    */
+        struct ClientUserAuthentication userauth;
+        rrecv(client->fd, &userauth, sizeof(userauth));
 
-    //authresp.status = AuthSuccess;
-    //send(client->fd, &authresp, sizeof(authresp), 0);
+
+        /* Allocate data for the username and password they are going to send us. */
+        char username[257];
+        char password[257];
+
+        rrecv(client->fd, username, userauth.username_len);
+        uint8_t password_len = 0;
+        rrecv(client->fd, &password_len, 1);
+        rrecv(client->fd, password, password_len);
+
+        /* Give them null terminators so they play nicely with C's string functions. */
+        username[userauth.username_len] = '\0';
+        password[password_len] = '\0';
+
+        struct ServerAuthenticationResponse authresp;
+        authresp.version = 1;
+        authresp.status = 0;
+
+        if (!!strcmp(username, client->sock->username) || !!strcmp(password, client->sock->password))
+        {
+            authresp.status = 1;
+        }
+
+        rsend(client->fd, &authresp, sizeof(authresp));
+
+        if (authresp.status != 0)
+            goto cleanup;
+    }
+   
 
     /* Get what the client wants. */
     struct ClientRequest clientreq;
@@ -137,21 +211,35 @@ void *socks5_client_handler(void *info)
             rrecv(client->fd, &dlength, 1);
             rrecv(client->fd, &domain, dlength);
 
+            /* Give a null terminator at the end of the string. */
             domain[dlength] = '\0';
 
-            /* Statically allocated; no need to free. */
-            struct hostent *resolution = gethostbyname(domain);
-
-            /* Domain resolution failed. */
-            if (!resolution)
-            {
-                response.reply = HostUnreachable;
-            }
+            struct domainres *override = NULL;
+            HASH_FIND_STR(client->sock->dnsoverride, domain, override);
 
             response.address_type = DOMAIN;
 
-            /* struct assignment is more efficient than using memcpy(). */
-            destaddr.sin_addr = *((struct in_addr*) resolution->h_addr_list[0]);
+            if (override != NULL)
+                destaddr.sin_addr.s_addr = override->ip;
+            else
+            {
+                /* Statically allocated; no need to free. */
+                struct hostent *resolution = gethostbyname(domain);
+
+
+                /* Domain resolution failed. */
+                if (!resolution)
+                {
+                    response.reply = HostUnreachable;
+                    break;
+                }
+
+    
+
+                /* struct assignment is more efficient than using memcpy(). */
+                destaddr.sin_addr = *((struct in_addr*) resolution->h_addr_list[0]);
+            }
+
             break;
         }
     }
