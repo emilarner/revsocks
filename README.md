@@ -5,11 +5,15 @@
 Cross-platform SOCKS5 proxy server written in C that can also reverse itself over a firewall.
 
 
-Version 1.3: Windows Support + Binary protocol
+Version 1.4: DNS override + Username-Password authentication
 
 
 Changelog:
 
+Version 1.4:
+    - DNS override implemented. Have certain domains resolve to certain IP addresses given a DNS override file.
+    - SOCKS5 username-password authentication implemented.
+    
 Version 1.3:
 
     - Text reverse protocol changed to binary.
