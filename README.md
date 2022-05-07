@@ -1,3 +1,7 @@
+
+
+
+
 # revsocks
 Cross-platform SOCKS5 proxy server written in C that can also reverse itself over a firewall.
 
@@ -33,8 +37,9 @@ Version 1.1:
 
 Bugs:
 
-    - Sometimes, for whatever reason, revsocks will refuse to work on certain services. For instance, running revsocks to reverse proxy a replit.com instance will cause the program to crash after only a few requests have been made through it.
-    - For some unknown reason, there are instances of infinite loops using insane amounts of system resources. Interestingly, it mostly happens on Windows, whereas on Linux it is quite rare. 
+ - Sometimes, for whatever reason, revsocks will refuse to work on certain services. For instance, running revsocks to reverse proxy a replit.com instance will cause the program to crash after only a few requests have been made through it.
+ - For some unknown reason, there are instances of infinite loops using insane amounts of system resources. Interestingly, it mostly happens on Windows, whereas on Linux it is quite rare. 
+
 
 Revsocks is a minimal SOCKS5 proxy server that can either run as an average server or reverse itself over a firewall. Revsocks does not support UDP or BIND features, which are specified in the SOCKS5 protocol specification. Revsocks is not scalable, nor does it employ particularly good programming practices to ensure longevity. Revsocks is to be used for temporary purposes, not for outside the usage of more than about three people. Revsocks uses select() for its purposes, contributing to its lack of scalability. 
 
