@@ -199,9 +199,7 @@ int main(int argc, char **argv, char **envp)
         int status = start_revsocksserver(srv);
 
         if (status != 0)
-        {
             fprintf(stderr, "Error starting RevSocksServer: %s\n", strerror(status));
-        }
 
         free_revsocksserver(srv);
     }
@@ -242,6 +240,7 @@ int main(int argc, char **argv, char **envp)
             host_socks5_server(s);
         }
 
+        free_socks5_server(s); 
     }
 
     return 0;

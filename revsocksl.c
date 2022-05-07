@@ -108,35 +108,45 @@ void *socks5_client_handler(void *info)
 
     /* Get the methods that the client wants. */
     struct ClientSelectMethod cmethod;
-    rrecv(client->fd, &cmethod, sizeof(cmethod));
+    if (rrecv(client->fd, &cmethod, sizeof(cmethod)) == -1)
+        goto cleanup; 
 
 
     /* Get all of the available, the number of which specified by the header sent by the client above. */
     uint8_t methods[256];
-    rrecv(client->fd, methods, cmethod.nomethods);
+    if (rrecv(client->fd, methods, cmethod.nomethods) == -1)
+        goto cleanup;
     
     struct ServerMethodSelection mymethod;
     mymethod.version = SOCKS5;
     mymethod.selection = client->sock->password_auth ? UsernamePassword : NoAuthentication; 
 
-    rsend(client->fd, &mymethod, sizeof(mymethod));
+    if (rsend(client->fd, &mymethod, sizeof(mymethod)) == -1)
+        goto cleanup;
 
     
     /* Username-Password sub-negotiation, given we are in that mode. */
     if (client->sock->password_auth)
     {
         struct ClientUserAuthentication userauth;
-        rrecv(client->fd, &userauth, sizeof(userauth));
+        if (rrecv(client->fd, &userauth, sizeof(userauth)) == -1)
+            goto cleanup;
 
 
         /* Allocate data for the username and password they are going to send us. */
         char username[257];
         char password[257];
 
-        rrecv(client->fd, username, userauth.username_len);
+        if (rrecv(client->fd, username, userauth.username_len) == -1)
+            goto cleanup;
+
         uint8_t password_len = 0;
-        rrecv(client->fd, &password_len, 1);
-        rrecv(client->fd, password, password_len);
+
+        if (rrecv(client->fd, &password_len, 1) == -1)
+            goto cleanup;
+
+        if (rrecv(client->fd, password, password_len) == -1)
+            goto cleanup;
 
         /* Give them null terminators so they play nicely with C's string functions. */
         username[userauth.username_len] = '\0';
@@ -151,7 +161,8 @@ void *socks5_client_handler(void *info)
             authresp.status = 1;
         }
 
-        rsend(client->fd, &authresp, sizeof(authresp));
+        if (rsend(client->fd, &authresp, sizeof(authresp)) == -1)
+            goto cleanup;
 
         if (authresp.status != 0)
             goto cleanup;
@@ -160,7 +171,8 @@ void *socks5_client_handler(void *info)
 
     /* Get what the client wants. */
     struct ClientRequest clientreq;
-    rrecv(client->fd, &clientreq, sizeof(clientreq));
+    if (rrecv(client->fd, &clientreq, sizeof(clientreq)) == -1)
+        goto cleanup;
 
     /* This will be the response to the client. */
     struct ServerResponse response;
@@ -194,11 +206,11 @@ void *socks5_client_handler(void *info)
         case IPV4:
         {
             in_addr_t ipaddr = 0;
-            rrecv(client->fd, &ipaddr, sizeof(ipaddr));
+            if (rrecv(client->fd, &ipaddr, sizeof(ipaddr)) == -1)
+                goto cleanup;
+
             destaddr.sin_addr.s_addr = ipaddr;
-
             response.address_type = IPV4;
-
             break;
         }
 
@@ -208,8 +220,11 @@ void *socks5_client_handler(void *info)
         /* text is NOT null-terminated. */
         case DOMAIN:
         {
-            rrecv(client->fd, &dlength, 1);
-            rrecv(client->fd, &domain, dlength);
+            if (rrecv(client->fd, &dlength, 1) == -1)
+                goto cleanup;
+
+            if (rrecv(client->fd, &domain, dlength) == -1)
+                goto cleanup;
 
             /* Give a null terminator at the end of the string. */
             domain[dlength] = '\0';
@@ -245,7 +260,8 @@ void *socks5_client_handler(void *info)
     }
 
     /* Get the port. */
-    rrecv(client->fd, &destaddr.sin_port, 2);
+    if (rrecv(client->fd, &destaddr.sin_port, 2) == -1)
+        goto cleanup;
 
     /* Connect to the remote end that the client wants to connect to, through us. */
     /* If there is an error with connecting to it, report that to the client. */
@@ -277,27 +293,35 @@ void *socks5_client_handler(void *info)
 
 
     /* Send the response. */
-    rsend(client->fd, &response, sizeof(response));
+    if (rsend(client->fd, &response, sizeof(response)) == -1)
+        goto cleanup;
     
     /* Depending on the address type, send it in the respective format. */
     switch (response.address_type)
     {
         case IPV4:
         {
-            rsend(client->fd, &destaddr.sin_addr.s_addr, 4);
+            if (rsend(client->fd, &destaddr.sin_addr.s_addr, 4) == -1)
+                goto cleanup;
+
             break;
         }
 
         case DOMAIN:
         {
-            rsend(client->fd, &dlength, 1);
-            rsend(client->fd, &domain, dlength);
+            if (rsend(client->fd, &dlength, 1) == -1)
+                goto cleanup;
+
+            if (rsend(client->fd, &domain, dlength) == -1)
+                goto cleanup;
+
             break;
         }
     }
 
     /* Port must now be sent. */
-    rsend(client->fd, &destaddr.sin_port, 2);
+    if (rsend(client->fd, &destaddr.sin_port, 2) == -1)
+        goto cleanup;
 
     if (response.reply != Success)
         goto cleanup; 
@@ -314,8 +338,8 @@ void *socks5_client_handler(void *info)
     int blocking = 1;
     ioctlsocket(client->fd, FIONBIO, &blocking);
     ioctlsocket(end, FIONBIO, &blocking);
-
 #endif
+
     while (true)
     {
         char buffer[EXCHANGE_BUFFER_SIZE];
@@ -535,7 +559,8 @@ int host_rev_socks5_server(RevSocks *rs, char *remote_host, int remote_port)
 
 /* Nice... Windows... */
 #ifdef WINDOWS
-        HANDLE tmpthread = CreateThread(NULL, 0, (LPTHREAD_START_ROUTINE) socks5_client_handler, (void*)c, 0, NULL);
+        HANDLE tmpthread = CreateThread(NULL, 0, (LPTHREAD_START_ROUTINE) socks5_client_handler, 
+                        (void*)c, 0, NULL);
 #endif
 
     }

@@ -41,8 +41,6 @@ void *local_server(void *information)
 
     printf("Started local server on port %d\n", ntohs(info->sock.sin_port));
 
-    printf("File descriptor: %d\n", info->fd);
-
     while (true)
     {
         struct sockaddr_in client;
@@ -145,10 +143,13 @@ void *remote_server(void *information)
         if ((cfd = accept(info->fd, (struct sockaddr*) &client, &length)) < 0)
         {
             fprintf(stderr, "accept() failed in remote server: %s\n", strerror(errno));
-            csleep(SECOND);
+            csleep(ERROR_SLEEP);
             continue;
         }
 
+        /* We need to know their purposes of connecting. */
+        /* Are they going to be used for controlling the SOCKS5 reverse server? */
+        /* Or are they going to be connecting upon a CONNECT request, to bypass the firewall? */ 
         uint8_t handshake;
         rrecv(cfd, &handshake, 1);
 
@@ -158,7 +159,7 @@ void *remote_server(void *information)
             /* They want to serve as a control receiver. */
             case REVSOCKS_CONTROL:
             {
-                printf("Control connection accepted. FD: %d\n", cfd);
+                printf("Control connection accepted. You are now able to use them as a SOCKS5 proxy.");
                 info->srv->control_cfd = cfd;
                 break;
             }
