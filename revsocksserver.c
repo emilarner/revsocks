@@ -37,6 +37,10 @@ int create_server(struct ServerInformation *srv, int port)
 
 void *local_server(void *information)
 {
+    #ifdef UNIX
+        signal(SIGPIPE, SIG_IGN);
+    #endif
+
     struct ServerInformation *info = (struct ServerInformation*) information;
 
     printf("Started local server on port %d\n", ntohs(info->sock.sin_port));
@@ -73,6 +77,10 @@ void *local_server(void *information)
 
 void *glue(void *p)
 {
+    #ifdef UNIX
+        signal(SIGPIPE, SIG_IGN);
+    #endif
+
     struct FDPair *pair = (struct FDPair*) p;
 
     /* Timeout for select() */
@@ -127,6 +135,10 @@ void *glue(void *p)
 
 void *remote_server(void *information)
 {
+    #ifdef UNIX
+        signal(SIGPIPE, SIG_IGN);
+    #endif
+    
     struct ServerInformation *info = (struct ServerInformation*) information;
 
     printf("Started remote server on port %d\n", ntohs(info->sock.sin_port));

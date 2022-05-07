@@ -100,9 +100,9 @@ int parse_domain_file(RevSocks *rs, char *filename)
 void *socks5_client_handler(void *info)
 {
     /* SIGPIPE is the bane of our existence--disable it. */
-#ifdef UNIX
-    //signal(SIGPIPE, SIG_IGN);
-#endif
+    #ifdef UNIX
+        signal(SIGPIPE, SIG_IGN);
+    #endif
 
     struct Client *client = (struct Client*) info;
 
@@ -455,6 +455,10 @@ int host_socks5_server(RevSocks *rs)
 /* Host a reversed SOCKS5 server. We won't be binding. Instead, we connect to a remote host. */
 int host_rev_socks5_server(RevSocks *rs, char *remote_host, int remote_port)
 {
+    #ifdef UNIX
+        signal(SIGPIPE, SIG_IGN);
+    #endif
+
     /* Why do people hate gethostbyname()? getaddrinfo() is a nightmare. */
     struct hostent *resolution = gethostbyname(remote_host);
 
