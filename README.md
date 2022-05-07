@@ -1,6 +1,3 @@
-
-
-
 # revsocks
 Cross-platform SOCKS5 proxy server written in C that can also reverse itself over a firewall.
 
@@ -11,6 +8,7 @@ Version 1.4: DNS override + Username-Password authentication
 Changelog:
 
 Version 1.4:
+
     - DNS override implemented. Have certain domains resolve to certain IP addresses given a DNS override file.
     - SOCKS5 username-password authentication implemented.
     
@@ -33,6 +31,10 @@ Version 1.1:
     - Implementation of recvall() changed.
 
 
+Bugs:
+
+    - Sometimes, for whatever reason, revsocks will refuse to work on certain services. For instance, running revsocks to reverse proxy a replit.com instance will cause the program to crash after only a few requests have been made through it.
+    - For some unknown reason, there are instances of infinite loops using insane amounts of system resources. Interestingly, it mostly happens on Windows, whereas on Linux it is quite rare. 
 
 Revsocks is a minimal SOCKS5 proxy server that can either run as an average server or reverse itself over a firewall. Revsocks does not support UDP or BIND features, which are specified in the SOCKS5 protocol specification. Revsocks is not scalable, nor does it employ particularly good programming practices to ensure longevity. Revsocks is to be used for temporary purposes, not for outside the usage of more than about three people. Revsocks uses select() for its purposes, contributing to its lack of scalability. 
 
@@ -59,11 +61,14 @@ Here is the help menu from *revsocks*:
     -d, --dns [filename]                        Modify DNS resolutions using domain:address\n format
     -h, --help                                  Display this help menu.
 
-Note: the DNS override feature is not currently implemented.
-Note: the username and password authentication negotiation is not implemented either.
-Note: there is a potential memory dumping bug observed in this program, which is not fixed as of now. 
 
 This program is mostly for my usage, explaining the lack of clarity in my explanations. In general, use *--remote-server* to host a server to help computer A get over the firewall. Use *--reverse* to reverse a SOCKS5 proxy server over the firewall to computer B. *lport* is the port which you would connect to locally on computer B to access the reversed SOCKS5 proxy session. *remote_port* is the port which must be made accessible to computer A to get past the firewall. The naming conventions are ambiguous and confusing, but it is too late to change them now. 
+
+In order to require username-password authentication, one must first set the *-up, --username-password* flag--otherwise, it will not work. Then, the username and password are promptly specified by the *-u/--username* and *-p/--password* arguments. Unless there is a demand or a need for multiple usernames and passwords, *revsocks* will only support ONE username-password pair for authentication. *revsocks* is not a professional-grade SOCKS5 proxy, after all. 
+
+*-d/--dns* requires a file which is in the format that *revsocks* can understand correctly. A DNS override file should contain a domain separated by an equals sign *=* to its corresponding IP address, with each entry separated by a UNIX newline *\n*. For reference, please view the *example-dns* file that is within this repository.
+
+
 
 
 To compile:
