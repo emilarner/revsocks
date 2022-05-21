@@ -2,3 +2,6 @@ revsocks
 revsocks.exe
 *.exe
 *.obj
+*.o
+*.a
+*.lib

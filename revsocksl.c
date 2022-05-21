@@ -32,6 +32,9 @@ RevSocks *init_socks5_server(char *username, char *password, uint16_t port, char
         }
     }
 
+    r->echo = false;
+    r->connection_callback = default_connection_callback;
+    
     return r;
 }
 
@@ -59,7 +62,9 @@ int parse_domain_file(RevSocks *rs, char *filename)
         /* Detect syntatical errors in the domain override file. */ 
         if (strchr(line, '=') == NULL)
         {
-            fprintf(stderr, "DNS override wrong file format... missing '=' delimiter.\n");
+            if (rs->echo)
+                fprintf(stderr, "DNS override wrong file format... missing '=' delimiter.\n");
+
             return -1;
         }
 
@@ -70,19 +75,22 @@ int parse_domain_file(RevSocks *rs, char *filename)
         
         char *ip = strtok(NULL, "=");
 
-        printf("DNS Domain: %s\n", pair->domain);
+        if (rs->echo)
+            printf("DNS Domain: %s\n", pair->domain);
 
         struct hostent *ent = gethostbyname(ip);
         if (ent == NULL)
         {
             #ifdef UNIX
-                fprintf(stderr, "DNS override error: IP/DOMAIN %s cannot be resolved: %s\n", 
-                    ip, hstrerror(h_errno));
+                if (rs->echo)
+                    fprintf(stderr, "DNS override error: IP/DOMAIN %s cannot be resolved: %s\n", 
+                        ip, hstrerror(h_errno));
             #endif
 
             #ifdef WINDOWS
-                fprintf(stderr, "DNS override error: IP/DOMAIN %s cannot be resolved; WSA CODE: %d\n", 
-                    ip, WSAGetLastError()); 
+                if (rs->echo)
+                    fprintf(stderr, "DNS override error: IP/DOMAIN %s cannot be resolved; WSA CODE: %d\n", 
+                        ip, WSAGetLastError()); 
             #endif 
             continue;
         }
@@ -350,16 +358,20 @@ void *socks5_client_handler(void *info)
 
         int status = select(MAX_SELECT_FDS, &exchange, NULL, NULL, &timeout);
 
+        if (status == -1)
+            break;
+
+
         /* Important to detect if the other end has closed. We do this by checking for -1 on send() */
         /* recv() will return 0 when the socket closes, so check for that too. */
         /* If the client has data, send it to the other end. */
         if (FD_ISSET(client->fd, &exchange))
         {
-            size_t len = 0;
-            if ((len = recv(client->fd, buffer, sizeof(buffer), MSG_DONTWAIT)) == 0)
+            ssize_t len = 0;
+            if ((len = recv(client->fd, buffer, sizeof(buffer), MSG_DONTWAIT)) <= 0)
                 break;
 
-            if (send(end, buffer, len, MSG_DONTWAIT) == -1)
+            if (send(end, buffer, len, MSG_DONTWAIT) <= 0)
                 break;
 
         }
@@ -367,12 +379,12 @@ void *socks5_client_handler(void *info)
         /* And vice versa. */
         if (FD_ISSET(end, &exchange))
         {
-            size_t len = 0;
+            ssize_t len = 0;
             
-            if ((len = recv(end, buffer, sizeof(buffer), MSG_DONTWAIT)) == 0)
+            if ((len = recv(end, buffer, sizeof(buffer), MSG_DONTWAIT)) <= 0)
                 break;
             
-            if (send(client->fd, buffer, len, MSG_DONTWAIT) == -1)
+            if (send(client->fd, buffer, len, MSG_DONTWAIT) <= 0)
                 break;
         }
     }
@@ -385,16 +397,25 @@ void *socks5_client_handler(void *info)
         free(client);
 }
 
+void default_connection_callback(RevSocks *r, int fd, struct sockaddr_in *addr)
+{
+    if (r->echo)
+        printf("Connection received from: %s:%d\n", 
+                inet_ntoa(addr->sin_addr), ntohs(addr->sin_port));
+}
+
 int host_socks5_server(RevSocks *rs)
 {
-#ifdef UNIX
-    signal(SIGPIPE, SIG_IGN);
-#endif
+    #ifdef UNIX
+        signal(SIGPIPE, SIG_IGN);
+    #endif
 
     /* Try to create the socket. */
     if ((rs->fd = socket(AF_INET, SOCK_STREAM, 0)) < 0)
     {
-        fprintf(stderr, "Cannot create socket server: %s\n", strerror(errno));
+        if (rs->echo)
+            fprintf(stderr, "Cannot create socket server: %s\n", strerror(errno));
+
         return -1;
     }
 
@@ -410,7 +431,9 @@ int host_socks5_server(RevSocks *rs)
     /* Attempt to bind on that port. */
     if ((bind(rs->fd, (struct sockaddr*) &rs->sock, (socklen_t) sizeof(struct sockaddr_in))) < 0)
     {
-        fprintf(stderr, "Failed to bind on port %d: %s\n", rs->port, strerror(errno));
+        if (rs->echo)
+            fprintf(stderr, "Failed to bind on port %d: %s\n", rs->port, strerror(errno));
+        
         return -2;
     }
 
@@ -427,11 +450,13 @@ int host_socks5_server(RevSocks *rs)
 
         if ((cfd = accept(rs->fd, (struct sockaddr*) &client, &client_len)) < 0)
         {
-            fprintf(stderr, "Failed to accept on SOCKS5 server!: %s\n", strerror(errno));
+            if (rs->echo)
+                fprintf(stderr, "Failed to accept on SOCKS5 server!: %s\n", strerror(errno));
+            
             continue;
         }
 
-        printf("Connection from: %s:%d !\n", inet_ntoa(client.sin_addr), ntohs(client.sin_port));
+        rs->connection_callback(rs, cfd, &client);
 
         /* Allocate a heap struct containing necessary information. */
         struct Client *c = (struct Client*) malloc(sizeof(struct Client));
@@ -465,13 +490,16 @@ int host_rev_socks5_server(RevSocks *rs, char *remote_host, int remote_port)
     if (resolution == NULL)
     {
         #ifdef UNIX
-            fprintf(stderr, "Error in remote hostname resolution: %s\n", hstrerror(h_errno));
+            if (rs->echo)
+                fprintf(stderr, "Error in remote hostname resolution: %s\n", 
+                                hstrerror(h_errno));
         #endif
         
         #ifdef WINDOWS
-            fprintf(stderr, "Ah... Windows. Don't want to get string of error... Here's the code: %d\n",
-                WSAGetLastError()
-            );
+            if (rs->echo)
+                fprintf(stderr, "Ah... Windows. Don't want to get string of error... Here's the code: %d\n",
+                    WSAGetLastError()
+                );
         #endif
         
         return -1;
@@ -489,16 +517,28 @@ int host_rev_socks5_server(RevSocks *rs, char *remote_host, int remote_port)
 
     if (connect(control_fd, (struct sockaddr*) &control, (socklen_t) sizeof(control)) < 0)
     {
-        fprintf(stderr, "Error connecting to control: %s\n", strerror(errno));
+        if (rs->echo)
+            fprintf(stderr, "Error connecting to control: %s\n", strerror(errno));
+
         return -1;
     }
+
+    if (rs->echo)
+        printf("Connected to the remote end at %s:%d.\n", 
+                    inet_ntoa(control.sin_addr), ntohs(control.sin_port));
 
     /* Declare that our first connection be that of a control socket. */
     /* It shall tell us when to connect to the remote end as a normal socket, */
     /* upon every SOCKS5 proxy request on the local end of the reverse server. */
 
     uint8_t handshake_msg = REVSOCKS_CONTROL;
-    rsend(control_fd, &handshake_msg, 1); 
+    if (rsend(control_fd, &handshake_msg, 1) == -1)
+    {
+        if (rs->echo)
+            fprintf(stderr, "Control handshake failure; control server died, probably.\n");
+        
+        return -1;
+    }
 
     while (true)
     {
@@ -507,15 +547,20 @@ int host_rev_socks5_server(RevSocks *rs, char *remote_host, int remote_port)
 
         if (len <= 0)
         {
-            fprintf(stderr, "Control server has errored or died.\n");
+            if (rs->echo)
+                fprintf(stderr, "Control server has errored or died.\n");
+
             break;
         }
 
         /* Look for the CONNECT message. Inspired by firehop! */
         if (connect_msg != REVSOCKS_CONNECT)
         {
-            fprintf(stderr, "Error: non-connect msg sent to control socket.\n");
-            fprintf(stderr, "Here's what was sent: %d\n", connect_msg);
+            if (rs->echo)
+            {
+                fprintf(stderr, "Error: non-connect msg sent to control socket.\n");
+                fprintf(stderr, "Here's what was sent: %d\n", connect_msg);
+            }
 
             csleep(SECOND);
             continue;
@@ -528,7 +573,9 @@ int host_rev_socks5_server(RevSocks *rs, char *remote_host, int remote_port)
         /* Create connection socket and check for errors. */
         if ((cfd = socket(AF_INET, SOCK_STREAM, 0)) < 0)
         {
-            fprintf(stderr, "Error creating connection socket: %s\n", strerror(errno));
+            if (rs->echo)
+                fprintf(stderr, "Error creating connection socket: %s\n", strerror(errno));
+            
             csleep(SECOND);
             continue;
         }
@@ -540,14 +587,22 @@ int host_rev_socks5_server(RevSocks *rs, char *remote_host, int remote_port)
         /* Actually connect, checking for errors. */
         if (connect(cfd, (struct sockaddr*) &client, (socklen_t) sizeof(client)) < 0)
         {
-            fprintf(stderr, "Error connecting on CONNECT: %s\n", strerror(errno));
+            if (rs->echo)
+                fprintf(stderr, "Error connecting on CONNECT: %s\n", strerror(errno));
+
             csleep(SECOND);
             continue;
         }
 
         /* Declare ourselves normal; we are not a CONTROL socket. */
         uint8_t normal_msg = REVSOCKS_NORMAL;
-        rsend(cfd, &normal_msg, 1); 
+        if (rsend(cfd, &normal_msg, 1) == -1)
+        {
+            if (rs->echo)
+                fprintf(stderr, "Control server died. Cannot send REVSOCKS_NORMAL handshake!\n");
+            
+            return -1;
+        } 
 
         /* Cool thing: the SOCKS5 protocol implementation doesn't care whether it's a server or a client. */
         struct Client *c = (struct Client*) malloc(sizeof(struct Client));

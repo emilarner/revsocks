@@ -193,6 +193,8 @@ int main(int argc, char **argv, char **envp)
     if (rserver)
     {   
         RevSocksServer *srv = init_revsocksserver(rport, lport);
+        srv->echo = true;
+        
         printf("Hosting a reverse server, with a remote port of %d and a local port of %d\n", 
                 rport, lport);
 
@@ -215,6 +217,7 @@ int main(int argc, char **argv, char **envp)
         }
 
         RevSocks *s = init_socks5_server(username, password, port, dns_file);
+        s->echo = true;
 
         /* Error initializing SOCKS5 server. */
         if (s == NULL)

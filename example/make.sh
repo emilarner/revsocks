@@ -1,0 +1,1 @@
+gcc -o test test.c ../lib/unix/librevsocks.a

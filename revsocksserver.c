@@ -2,6 +2,14 @@
 
 RevSocksServer *init_revsocksserver(int remote_port, int local_port)
 {
+    /* Ports cannot be above 65535. */
+    if (remote_port > 65535 || local_port > 65536)
+        return NULL;
+
+    /* Ports below 1 do not make sense. Yes, 0 is non-bindable/non-usable. */
+    if (remote_port < 1 || local_port < 1)
+        return NULL; 
+
     RevSocksServer *srv = (RevSocksServer*) malloc(sizeof(RevSocksServer));
 
     srv->control_fd = 0;
@@ -13,6 +21,7 @@ RevSocksServer *init_revsocksserver(int remote_port, int local_port)
     srv->local_port = local_port;
 
     srv->stack = stack_init();
+    srv->echo = false;
 
     return srv;
 }
@@ -29,7 +38,8 @@ int create_server(struct ServerInformation *srv, int port)
     if ((bind(srv->fd, (struct sockaddr*) &srv->sock, (socklen_t) sizeof(struct sockaddr_in))) < 0)
         return errno;
 
-    listen(srv->fd, LISTEN_BACKLOG);
+    if (listen(srv->fd, LISTEN_BACKLOG) < 0)
+        return errno;
 
     return 0;
 }
@@ -38,12 +48,13 @@ int create_server(struct ServerInformation *srv, int port)
 void *local_server(void *information)
 {
     #ifdef UNIX
-        signal(SIGPIPE, SIG_IGN);
+        signal(SIGPIPE, SIG_IGN); // signal() does not exist on Windows.
     #endif
 
     struct ServerInformation *info = (struct ServerInformation*) information;
 
-    printf("Started local server on port %d\n", ntohs(info->sock.sin_port));
+    if (info->srv->echo)
+        printf("Started local server on port %d\n", ntohs(info->sock.sin_port));
 
     while (true)
     {
@@ -55,7 +66,9 @@ void *local_server(void *information)
         /* Accept the local connection; print any errors. */
         if ((cfd = accept(info->fd, (struct sockaddr*) &client, &length)) < 0)
         {
-            fprintf(stderr, "accept() failed in local_server: %s\n", strerror(errno));
+            if (info->srv->echo)
+                fprintf(stderr, "accept() failed in local_server: %s\n", strerror(errno));
+
             csleep(SECOND);
             continue;
         }
@@ -65,8 +78,12 @@ void *local_server(void *information)
         /* Send the message that we need a connection for the client we just received. */
         if (rsend(info->srv->control_cfd, &connect_msg, 1) < 0)
         {
-            fprintf(stderr, "Critical error: control server error!: %s\n", strerror(errno));
-            fprintf(stderr, "~~~~~~~~~~~~~~~~^ FD: %d\n", info->srv->control_cfd);
+            if (info->srv->echo)
+            {
+                fprintf(stderr, "Critical error: control server error!: %s\n", strerror(errno));
+                fprintf(stderr, "~~~~~~~~~~~~~~~~^ FD: %d\n", info->srv->control_cfd);
+            }
+
             continue;
         }
 
@@ -99,29 +116,32 @@ void *glue(void *p)
 
         int status = select(MAX_SELECT_FDS, &two, NULL, NULL, &timeout);
 
+        if (status == -1)
+            break;
+
         /* When local has data, send it to the remote end. */
         if (FD_ISSET(pair->local, &two))
         {
-            size_t len = recv(pair->local, buffer, sizeof(buffer), MSG_DONTWAIT);
+            ssize_t len = recv(pair->local, buffer, sizeof(buffer), MSG_DONTWAIT);
             
             /* Closed. */
-            if (!len)
+            if (len <= 0)
                 break;
 
-            if (send(pair->remote, buffer, len, MSG_DONTWAIT) < 0)
+            if (send(pair->remote, buffer, len, MSG_DONTWAIT) <= 0)
                 break;
         }
 
         /* When remote has data, send it to the local end. */
         if (FD_ISSET(pair->remote, &two))
         {
-            size_t len = recv(pair->remote, buffer, sizeof(buffer), MSG_DONTWAIT);
+            ssize_t len = recv(pair->remote, buffer, sizeof(buffer), MSG_DONTWAIT);
             
             /* Closed. */
-            if (!len)
+            if (len <= 0)
                 break;
 
-            if (send(pair->local, buffer, len, MSG_DONTWAIT) < 0)
+            if (send(pair->local, buffer, len, MSG_DONTWAIT) <= 0)
                 break;
         }
     }
@@ -141,7 +161,8 @@ void *remote_server(void *information)
     
     struct ServerInformation *info = (struct ServerInformation*) information;
 
-    printf("Started remote server on port %d\n", ntohs(info->sock.sin_port));
+    if (info->srv->echo)
+        printf("Started remote server on port %d\n", ntohs(info->sock.sin_port));
 
     /* Again, if you forget to set the socklen_t variable to the size of the sockaddr_in structure, may you suffer! */
     /* PROBABLY one of the easiest things to forget -- so don't do it. */
@@ -154,7 +175,9 @@ void *remote_server(void *information)
 
         if ((cfd = accept(info->fd, (struct sockaddr*) &client, &length)) < 0)
         {
-            fprintf(stderr, "accept() failed in remote server: %s\n", strerror(errno));
+            if (info->srv->echo)
+                fprintf(stderr, "accept() failed in remote server: %s\n", strerror(errno));
+            
             csleep(ERROR_SLEEP);
             continue;
         }
@@ -171,7 +194,9 @@ void *remote_server(void *information)
             /* They want to serve as a control receiver. */
             case REVSOCKS_CONTROL:
             {
-                printf("Control connection accepted. You are now able to use them as a SOCKS5 proxy.");
+                if (info->srv->echo)
+                    printf("Control connection accepted. You are now able to use them as a SOCKS5 proxy.");
+                
                 info->srv->control_cfd = cfd;
                 break;
             }
@@ -219,8 +244,11 @@ int start_revsocksserver(RevSocksServer *srv)
 
     
     /* Again, the skidded code which works so well. */ 
-    setsockopt(local.fd, SOL_SOCKET, SO_REUSEADDR, &(int){1}, sizeof(int));
-    setsockopt(remote.fd, SOL_SOCKET, SO_REUSEADDR, &(int){1}, sizeof(int));
+    if (setsockopt(local.fd, SOL_SOCKET, SO_REUSEADDR, &(int){1}, sizeof(int)) < 0)
+        return errno;
+
+    if (setsockopt(remote.fd, SOL_SOCKET, SO_REUSEADDR, &(int){1}, sizeof(int)) < 0)
+        return errno;
 
 #ifdef UNIX
     /* START POSIX only */

@@ -1,1 +1,1 @@
-gcc -g -lpthread -o revsocks *.c 
+gcc -O2 -lpthread -o revsocks *.c 

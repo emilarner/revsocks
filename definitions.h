@@ -5,11 +5,15 @@
 #include <errno.h>
 
 #ifdef _WIN32
-#define WINDOWS
+    #define WINDOWS
 #endif
 
 #ifdef __unix__
-#define UNIX
+    #define UNIX
+#endif
+
+#ifdef __APPLE__
+    #define UNIX
 #endif
 
 #define SECOND 1000000
