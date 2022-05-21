@@ -5,3 +5,4 @@ revsocks.exe
 *.o
 *.a
 *.lib
+a.out
