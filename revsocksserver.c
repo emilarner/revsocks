@@ -20,7 +20,7 @@ RevSocksServer *init_revsocksserver(int remote_port, int local_port)
     srv->remote_port = remote_port;
     srv->local_port = local_port;
 
-    srv->stack = stack_init();
+    utarray_new(srv->available_fds, &ut_int_icd);
     srv->echo = false;
 
     return srv;
@@ -73,6 +73,14 @@ void *local_server(void *information)
             continue;
         }
 
+        /* If there is no alive control connection, close the connection. */
+        /* Then, reiterate. */
+        if (!info->srv->control_cfd)
+        {
+            sclose(cfd);
+            continue;
+        }
+
         uint8_t connect_msg = REVSOCKS_CONNECT;
 
         /* Send the message that we need a connection for the client we just received. */
@@ -84,11 +92,12 @@ void *local_server(void *information)
                 fprintf(stderr, "~~~~~~~~~~~~~~~~^ FD: %d\n", info->srv->control_cfd);
             }
 
+            /* We don't have a working control connection, so let's clarify that */
+            info->srv->control_cfd = 0;
             continue;
         }
 
-        /* Evil! Dereferencing this 'pointer' will cause a crash -- it's just an fd!*/
-        stack_push(info->srv->stack, (void*) (long) cfd);
+        utarray_push_back(info->srv->available_fds, &cfd);
     }
 }
 
@@ -207,7 +216,8 @@ void *remote_server(void *information)
                 /* This must transcend the stack. malloc(), here we go! */
                 struct FDPair *fds = (struct FDPair*) malloc(sizeof(struct FDPair));
                 fds->remote = cfd;
-                fds->local = (long) stack_pop(info->srv->stack);
+                fds->local = *((int*) utarray_back(info->srv->available_fds));
+                utarray_pop_back(info->srv->available_fds);
 
                 #ifdef UNIX
                     pthread_t gluet;
@@ -280,6 +290,6 @@ void free_revsocksserver(RevSocksServer *srv)
     sclose(srv->local_fd);
     sclose(srv->remote_fd);
 
-    stack_free(srv->stack);
+    utarray_free(srv->available_fds);
     free(srv);
 }

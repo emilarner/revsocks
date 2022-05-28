@@ -6,13 +6,15 @@
 #include <string.h>
 #include <stdbool.h>
 
+#include "utarray.h"
+
 #include "networkmisc.h"
 #include "stack.h"
 #include "config.h"
 
 struct RevSocksServer
 {
-    Stack *stack;
+    UT_array *available_fds;
 
     int remote_fd;
     int control_fd;
