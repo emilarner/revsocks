@@ -9,7 +9,6 @@
 #include "utarray.h"
 
 #include "networkmisc.h"
-#include "stack.h"
 #include "config.h"
 
 struct RevSocksServer
