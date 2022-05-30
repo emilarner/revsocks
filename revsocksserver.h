@@ -61,6 +61,7 @@ int start_revsocksserver(RevSocksServer *srv);
 void free_revsocksserver(RevSocksServer *srv);
 
 
+/* Internal functions--do not use manually. */
 void *local_server(void *information);
 void *remote_server(void *information);
 

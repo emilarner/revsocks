@@ -31,6 +31,7 @@ void help()
     printf("%s\n", msg);
 }
 
+/* Checks if all characters within the port string are digits. */
 bool valid_port(char *strport)
 {
     for (int i = 0; i < strlen(strport); i++)
@@ -44,18 +45,19 @@ bool valid_port(char *strport)
 
 int main(int argc, char **argv, char **envp)
 {
+#ifdef WINDOWS
+        /* winsock requires initialization, for some reason... */
 
-    #ifdef WINDOWS
         WSADATA wsaData;
         int iResult;
 
-        // Initialize Winsock
         iResult = WSAStartup(MAKEWORD(2, 2), &wsaData);
-        if (iResult != 0) {
+        if (iResult != 0) 
+        {
             printf("WSAStartup failed: %d\n", iResult);
             return 1;
         }
-    #endif
+#endif
 
     bool password_auth = false;
     char *username = NULL;

@@ -1,5 +1,6 @@
 # This is a comment.
 # Domains can be resolved here too!
 # Not very useful, because of TLS and Cloudflare errors....
+
 example.org=1.1.1.1
 example.com=bing.com

@@ -44,6 +44,7 @@ int parse_domain_file(RevSocks *rs, char *filename)
     
     char line[512];
 
+    /* Get each line of the file until EOF. */ 
     while (fgets(line, sizeof(line), fp) != NULL)
     {
         /* Ignore comments. */
@@ -70,6 +71,7 @@ int parse_domain_file(RevSocks *rs, char *filename)
 
         struct domainres *pair = (struct domainres*) malloc(sizeof(struct domainres));
 
+        /* Parse */
         char *domain = strtok(line, "=");
         strncpy(pair->domain, domain, sizeof(pair->domain));
         
@@ -78,6 +80,7 @@ int parse_domain_file(RevSocks *rs, char *filename)
         if (rs->echo)
             printf("DNS Domain: %s\n", pair->domain);
 
+        /* Resolve IP/DOMAIN. Report any errors if they occur. */
         struct hostent *ent = gethostbyname(ip);
         if (ent == NULL)
         {
@@ -97,6 +100,7 @@ int parse_domain_file(RevSocks *rs, char *filename)
 
         pair->ip = ((struct in_addr*) ent->h_addr_list[0])->s_addr;
 
+        /* Add the resolution to our hashmap. */
         HASH_ADD_STR(rs->dnsoverride, domain, pair);
         memset(line, 0, sizeof(line)); 
     }
@@ -112,6 +116,7 @@ void *socks5_client_handler(void *info)
         signal(SIGPIPE, SIG_IGN);
     #endif
 
+    /* Since we can't dereference void*, cast it to the appropriate pointer. */
     struct Client *client = (struct Client*) info;
 
     /* Get the methods that the client wants. */
@@ -190,15 +195,11 @@ void *socks5_client_handler(void *info)
 
     /* Don't care about IPv6 */
     if (clientreq.address_type == IPV6)
-    {
         response.reply = AddressTypeNotSupported;
-    }
 
     /* Have not (and will not) implemented anything other than CONNECT. */
     if (clientreq.command != Connect)
-    {
         response.reply = CommandNotSupported;
-    }
 
     
     struct sockaddr_in destaddr;
@@ -237,6 +238,7 @@ void *socks5_client_handler(void *info)
             /* Give a null terminator at the end of the string. */
             domain[dlength] = '\0';
 
+            /* See if the domain shall be resolved through DNS override, first. */
             struct domainres *override = NULL;
             HASH_FIND_STR(client->sock->dnsoverride, domain, override);
 
@@ -258,8 +260,8 @@ void *socks5_client_handler(void *info)
                 }
 
     
-
                 /* struct assignment is more efficient than using memcpy(). */
+                /* set the resolved IP address inside of the struct sockaddr_in. */
                 destaddr.sin_addr = *((struct in_addr*) resolution->h_addr_list[0]);
             }
 
