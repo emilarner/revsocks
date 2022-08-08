@@ -125,7 +125,7 @@ void *glue(void *p)
 
         int status = select(MAX_SELECT_FDS, &two, NULL, NULL, &timeout);
 
-        if (status == -1)
+        if (status < 0)
             break;
 
         /* When local has data, send it to the remote end. */

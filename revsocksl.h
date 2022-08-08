@@ -8,23 +8,13 @@
 
 #include <errno.h>
 
-#include "uthash.h"
-
 #include "networkmisc.h"
 #include "definitions.h"
 #include "config.h"
 
-struct domainres
-{
-    char domain[256]; // key
-    in_addr_t ip; // value
-    UT_hash_handle hh; // <--- makes the structure hashable. 
-};
 
 struct RevSocks
 {
-    struct domainres *dnsoverride; 
-
     bool reverse;
 
     bool password_auth;
@@ -60,7 +50,7 @@ Initializes the RevSocks object. If no password auth, set username and password 
 If not using DNS override, set domain_file to NULL.
 Returns a pointer to a RevSocks object in heap memory, so you will need to free this later!
 */
-RevSocks *init_socks5_server(char *username, char *password, uint16_t port, char *domain_file);
+RevSocks *init_socks5_server(char *username, char *password, uint16_t port);
 
 
 int parse_domain_file(RevSocks *rs, char *filename);

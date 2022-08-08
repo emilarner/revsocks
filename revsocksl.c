@@ -1,6 +1,6 @@
 #include "revsocksl.h"
 
-RevSocks *init_socks5_server(char *username, char *password, uint16_t port, char *domain_file)
+RevSocks *init_socks5_server(char *username, char *password, uint16_t port)
 {
     RevSocks *r = (RevSocks*) malloc(sizeof(RevSocks));
 
@@ -23,89 +23,10 @@ RevSocks *init_socks5_server(char *username, char *password, uint16_t port, char
     /* Initializing to zero... just to make sure... */ 
     memset(&r->sock, 0, sizeof(struct sockaddr_in));
 
-    if (domain_file != NULL)
-    {
-        if (parse_domain_file(r, domain_file) < 0)
-        {
-            fprintf(stderr, "Revsocks initialization failed!\n");
-            return NULL;
-        }
-    }
-
     r->echo = false;
     r->connection_callback = default_connection_callback;
     
     return r;
-}
-
-int parse_domain_file(RevSocks *rs, char *filename)
-{
-    FILE *fp = fopen(filename, "r");
-    
-    char line[512];
-
-    /* Get each line of the file until EOF. */ 
-    while (fgets(line, sizeof(line), fp) != NULL)
-    {
-        /* Ignore comments. */
-        if (line[0] == '#')
-            continue;
-
-        /* Ignore whitespace */
-        if (line[0] == ' ' || line[0] == '\n' || line[0] == '\r')
-            continue;
-
-        /* Get rid of newline character. */
-        if (line[strlen(line) - 1] == '\n')
-            line[strlen(line) - 1] = '\0'; 
-
-
-        /* Detect syntatical errors in the domain override file. */ 
-        if (strchr(line, '=') == NULL)
-        {
-            if (rs->echo)
-                fprintf(stderr, "DNS override wrong file format... missing '=' delimiter.\n");
-
-            return -1;
-        }
-
-        struct domainres *pair = (struct domainres*) malloc(sizeof(struct domainres));
-
-        /* Parse */
-        char *domain = strtok(line, "=");
-        strncpy(pair->domain, domain, sizeof(pair->domain));
-        
-        char *ip = strtok(NULL, "=");
-
-        if (rs->echo)
-            printf("DNS Domain: %s\n", pair->domain);
-
-        /* Resolve IP/DOMAIN. Report any errors if they occur. */
-        struct hostent *ent = gethostbyname(ip);
-        if (ent == NULL)
-        {
-            #ifdef UNIX
-                if (rs->echo)
-                    fprintf(stderr, "DNS override error: IP/DOMAIN %s cannot be resolved: %s\n", 
-                        ip, hstrerror(h_errno));
-            #endif
-
-            #ifdef WINDOWS
-                if (rs->echo)
-                    fprintf(stderr, "DNS override error: IP/DOMAIN %s cannot be resolved; WSA CODE: %d\n", 
-                        ip, WSAGetLastError()); 
-            #endif 
-            continue;
-        }
-
-        pair->ip = ((struct in_addr*) ent->h_addr_list[0])->s_addr;
-
-        /* Add the resolution to our hashmap. */
-        HASH_ADD_STR(rs->dnsoverride, domain, pair);
-        memset(line, 0, sizeof(line)); 
-    }
-
-    fclose(fp);
 }
 
 /* where the SOCKS5 protocol is implemented (to a certain degree.) */
@@ -237,33 +158,25 @@ void *socks5_client_handler(void *info)
 
             /* Give a null terminator at the end of the string. */
             domain[dlength] = '\0';
-
-            /* See if the domain shall be resolved through DNS override, first. */
-            struct domainres *override = NULL;
-            HASH_FIND_STR(client->sock->dnsoverride, domain, override);
-
             response.address_type = DOMAIN;
 
-            if (override != NULL)
-                destaddr.sin_addr.s_addr = override->ip;
-            else
+            
+            /* Statically allocated; no need to free. */
+            struct hostent *resolution = gethostbyname(domain);
+
+
+            /* Domain resolution failed. */
+            if (!resolution)
             {
-                /* Statically allocated; no need to free. */
-                struct hostent *resolution = gethostbyname(domain);
-
-
-                /* Domain resolution failed. */
-                if (!resolution)
-                {
-                    response.reply = HostUnreachable;
-                    break;
-                }
-
-    
-                /* struct assignment is more efficient than using memcpy(). */
-                /* set the resolved IP address inside of the struct sockaddr_in. */
-                destaddr.sin_addr = *((struct in_addr*) resolution->h_addr_list[0]);
+                response.reply = HostUnreachable;
+                break;
             }
+
+
+            /* struct assignment is more efficient than using memcpy(). */
+            /* set the resolved IP address inside of the struct sockaddr_in. */
+            destaddr.sin_addr = *((struct in_addr*) resolution->h_addr_list[0]);
+            
 
             break;
         }

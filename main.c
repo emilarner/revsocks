@@ -81,8 +81,8 @@ int main(int argc, char **argv, char **envp)
         if (!strcmp(argv[i], "-q") || !strcmp(argv[i], "--quiet"))
         {
             FILE *fp = fopen(BITBUCKET, "w+");
-            dup2(fileno(fp), STDOUT_FILENO);
-            dup2(fileno(fp), STDERR_FILENO);
+            dup2(fileno(fp), fileno(stdout));
+            dup2(fileno(fp), fileno(stderr));
         }
 
         else if (!strcmp(argv[i], "-up") || !strcmp(argv[i], "--username-password"))
@@ -180,16 +180,6 @@ int main(int argc, char **argv, char **envp)
             help();
             return 0;
         }
-        else if (!strcmp(argv[i], "-d") || !strcmp(argv[i], "--dns"))
-        {
-            if (argv[i + 1] == NULL)
-            {
-                fprintf(stderr, "-d/--dns requires the filename of the DNS override file. See docs?\n");
-                return -1;
-            }
-
-            dns_file = argv[i + 1];
-        }
     }
     
     if (rserver)
@@ -218,7 +208,7 @@ int main(int argc, char **argv, char **envp)
             }
         }
 
-        RevSocks *s = init_socks5_server(username, password, port, dns_file);
+        RevSocks *s = init_socks5_server(username, password, port);
         s->echo = true;
 
         /* Error initializing SOCKS5 server. */
