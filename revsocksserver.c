@@ -103,6 +103,7 @@ void *local_server(void *information)
 
 void *glue(void *p)
 {
+    /* For UNIX systems: disable SIGPIPE--it's useless for our purposes. */
     #ifdef UNIX
         signal(SIGPIPE, SIG_IGN);
     #endif
@@ -125,6 +126,7 @@ void *glue(void *p)
 
         int status = select(MAX_SELECT_FDS, &two, NULL, NULL, &timeout);
 
+        /* If select() fails, exit our glue loop. */
         if (status < 0)
             break;
 
@@ -137,7 +139,7 @@ void *glue(void *p)
             if (len <= 0)
                 break;
 
-            if (send(pair->remote, buffer, len, MSG_DONTWAIT) <= 0)
+            if (send(pair->remote, buffer, len, 0) <= 0)
                 break;
         }
 
@@ -150,7 +152,7 @@ void *glue(void *p)
             if (len <= 0)
                 break;
 
-            if (send(pair->local, buffer, len, MSG_DONTWAIT) <= 0)
+            if (send(pair->local, buffer, len, 0) <= 0)
                 break;
         }
     }
@@ -164,14 +166,15 @@ void *glue(void *p)
 
 void *remote_server(void *information)
 {
+    /* SIGPIPE should be disabled on UNIX systems. */
+    
     #ifdef UNIX
         signal(SIGPIPE, SIG_IGN);
     #endif
     
     struct ServerInformation *info = (struct ServerInformation*) information;
 
-    if (info->srv->echo)
-        printf("Started remote server on port %d\n", ntohs(info->sock.sin_port));
+    printf("Started remote server on port %d\n", ntohs(info->sock.sin_port));
 
     /* Again, if you forget to set the socklen_t variable to the size of the sockaddr_in structure, may you suffer! */
     /* PROBABLY one of the easiest things to forget -- so don't do it. */
@@ -203,8 +206,7 @@ void *remote_server(void *information)
             /* They want to serve as a control receiver. */
             case REVSOCKS_CONTROL:
             {
-                if (info->srv->echo)
-                    printf("Control connection accepted. You are now able to use them as a SOCKS5 proxy.");
+                printf("Control connection accepted. You are now able to use them as a SOCKS5 proxy.");
                 
                 info->srv->control_cfd = cfd;
                 break;
@@ -216,7 +218,17 @@ void *remote_server(void *information)
                 /* This must transcend the stack. malloc(), here we go! */
                 struct FDPair *fds = (struct FDPair*) malloc(sizeof(struct FDPair));
                 fds->remote = cfd;
-                fds->local = *((int*) utarray_back(info->srv->available_fds));
+                int *intptr = utarray_back(info->srv->available_fds);
+                if (intptr == NULL)
+                {
+                    fprintf(stderr, "The remote connection has no local connection for gluing!\n");
+                    close(cfd);
+                    continue;
+                }
+
+                fds->local = *intptr;
+
+
                 utarray_pop_back(info->srv->available_fds);
 
                 #ifdef UNIX

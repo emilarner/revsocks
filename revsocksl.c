@@ -286,7 +286,7 @@ void *socks5_client_handler(void *info)
             if ((len = recv(client->fd, buffer, sizeof(buffer), MSG_DONTWAIT)) <= 0)
                 break;
 
-            if (send(end, buffer, len, MSG_DONTWAIT) <= 0)
+            if (send(end, buffer, len, 0) <= 0)
                 break;
 
         }
@@ -299,7 +299,7 @@ void *socks5_client_handler(void *info)
             if ((len = recv(end, buffer, sizeof(buffer), MSG_DONTWAIT)) <= 0)
                 break;
             
-            if (send(client->fd, buffer, len, MSG_DONTWAIT) <= 0)
+            if (send(client->fd, buffer, len, 0) <= 0)
                 break;
         }
     }
